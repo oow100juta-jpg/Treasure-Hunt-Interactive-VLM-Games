@@ -1,0 +1,267 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #16221a;
+  background: #eef4ed;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, #d8f3dc 0, transparent 32rem),
+    #eef4ed;
+}
+
+button, input { font: inherit; }
+
+.shell {
+  width: min(720px, calc(100% - 32px));
+  margin: 40px auto;
+}
+
+.card, .how {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d7e2d6;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 18px 50px rgba(22, 34, 26, 0.08);
+}
+
+.how { margin-top: 18px; }
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+h1 {
+  margin: 8px 0;
+  font-size: clamp(36px, 8vw, 64px);
+  line-height: 0.95;
+}
+
+.intro {
+  color: #526157;
+  line-height: 1.6;
+}
+
+.clue-box {
+  display: grid;
+  gap: 8px;
+  margin: 24px 0;
+  padding: 22px;
+  color: white;
+  background: #183d2b;
+  border-radius: 18px;
+}
+
+.clue-box span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  opacity: 0.7;
+}
+
+.clue-box strong { font-size: 22px; }
+
+/* ---- Camera ---- */
+
+.camera-container {
+  position: relative;
+  margin: 18px 0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0a0a0a;
+}
+
+.camera-container[hidden] {
+  display: none;
+}
+
+.camera-container.flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: white;
+  animation: flash-fade 300ms ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes flash-fade {
+  0% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+#viewfinder {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: 18px;
+}
+
+.capture-btn {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 68px;
+  height: 68px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 120ms ease;
+}
+
+.capture-btn:active {
+  transform: translateX(-50%) scale(0.9);
+}
+
+.capture-ring {
+  display: block;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 4px solid white;
+  background: rgba(255, 255, 255, 0.3);
+  transition: background 120ms ease;
+}
+
+.capture-btn:hover .capture-ring {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.start-camera-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 18px 0;
+  padding: 18px;
+}
+
+.start-camera-btn[hidden] {
+  display: none;
+}
+
+.start-camera-btn {
+  border: 2px dashed #b0c4b1;
+  border-radius: 16px;
+  background: rgba(216, 243, 220, 0.3);
+  color: #1f7a4d;
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.start-camera-btn:hover {
+  background: rgba(216, 243, 220, 0.6);
+  border-color: #1f7a4d;
+}
+
+/* ---- Preview & actions ---- */
+
+#preview {
+  width: 100%;
+  max-height: 420px;
+  margin-top: 18px;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+.captured-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.captured-actions[hidden] {
+  display: none;
+}
+
+#checkButton {
+  padding: 16px;
+  border: 0;
+  border-radius: 14px;
+  color: white;
+  background: #1f7a4d;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+#checkButton:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* ---- Results ---- */
+
+.result {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 16px;
+}
+
+.result.success { background: #dcfce7; }
+.result.retry { background: #fff1d6; }
+
+.result h2 { margin-top: 0; }
+
+.meter {
+  height: 12px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 99px;
+}
+
+#meterFill {
+  width: 0;
+  height: 100%;
+  background: currentColor;
+  transition: width 400ms ease;
+}
+
+details { margin-top: 12px; }
+li { margin: 6px 0; }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 9px 12px;
+  border: 1px solid #cbd8ca;
+  border-radius: 99px;
+  background: white;
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .shell { margin: 16px auto; }
+  .card, .how { padding: 20px; border-radius: 18px; }
+}
+
+.secondary {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  background: transparent;
+  font-weight: 800;
+  cursor: pointer;
+}

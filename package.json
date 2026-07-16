@@ -1,0 +1,17 @@
+{
+  "name": "semantic-treasure-hunt-vlm",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@huggingface/inference": "^4.13.4",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.1",
+    "openai": "^6.47.0"
+  }
+}
