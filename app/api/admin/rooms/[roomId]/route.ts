@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/supabase/server";
 import { rankTeams } from "@/lib/game/leaderboard";
 import { getGamePhase } from "@/lib/game/phase";
@@ -11,6 +12,7 @@ export async function GET(_: Request, context: { params: Promise<{ roomId: strin
     await supabase.rpc("expire_room_if_needed", { target_room_id: roomId });
     const { data: room, error: roomError } = await supabase.from("game_rooms").select("*").eq("id", roomId).eq("created_by", user.id).single();
     if (roomError || !room) throw roomError ?? new Error("Room not found");
+    const storageAdmin = createAdminClient();
     const { data: teamRows } = await supabase.from("teams")
       .select("id,name,status,total_score,completed_clue_count,total_attempt_count,leaderboard_freeze_acknowledged_at,last_seen_at")
       .eq("room_id", roomId);
@@ -32,7 +34,8 @@ export async function GET(_: Request, context: { params: Promise<{ roomId: strin
     }));
     const leaderboard = rankTeams(teams.map((team) => ({ id: team.id, name: team.name, totalScore: team.total_score, completedClueCount: team.completed_clue_count, totalAttemptCount: team.total_attempt_count, acceptedFirstTryCount: team.acceptedFirstTryCount, latestCompletionAt: team.latestCompletionAt, status: team.status })));
     const submissions = await Promise.all((submissionRows ?? []).map(async (submission) => {
-      const { data } = await supabase.storage.from("participant-submissions").createSignedUrl(submission.image_path, 300);
+      const { data, error } = await storageAdmin.storage.from("participant-submissions").createSignedUrl(submission.image_path, 300);
+      if (error) console.error(`[admin submission image] Could not sign ${submission.id}:`, error.message);
       return {
         id: submission.id,
         team_id: submission.team_id,

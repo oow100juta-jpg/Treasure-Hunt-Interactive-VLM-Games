@@ -9,7 +9,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, X, SwitchCamera, Upload } from "lucide-react";
+import { Camera, X, SwitchCamera } from "lucide-react";
 
 export interface CameraCaptureHandle {
   stopCamera: () => void;
@@ -19,10 +19,11 @@ interface CameraCaptureProps {
   targetLabel: string;
   onCapture: (dataUrl: string) => void;
   onCancel: () => void;
+  embedded?: boolean;
 }
 
 export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>(
-  function CameraCapture({ targetLabel, onCapture, onCancel }, ref) {
+  function CameraCapture({ targetLabel, onCapture, onCancel, embedded = false }, ref) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -31,7 +32,6 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
       "environment"
     );
     const [cameraCount, setCameraCount] = useState(0);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const stopStream = useCallback(() => {
       if (streamRef.current) {
@@ -77,13 +77,16 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
       const canvas = canvasRef.current;
       if (!video || !canvas) return;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      if (!video.videoWidth || !video.videoHeight) return;
+      const maxEdge = 1600;
+      const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.drawImage(video, 0, 0);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
       stopStream();
       onCapture(dataUrl);
     };
@@ -94,28 +97,15 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
       );
     };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          onCapture(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    };
-
     const handleCancel = () => {
       stopStream();
       onCancel();
     };
 
-    // Permission denied or no camera — show file upload fallback
+    // Permission denied or no camera — do not fall back to gallery uploads.
     if (hasPermission === false) {
       return (
-        <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <div className="flex h-full flex-col items-center justify-center space-y-3 bg-white p-4 text-center">
           <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center">
             <Camera className="w-8 h-8 text-amber-600" />
           </div>
@@ -124,24 +114,16 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
               Camera Not Available
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              Camera access was denied or is not available. You can upload a
-              photo from your gallery instead.
+              Camera access was denied or is not available. Enable camera
+              permission for this site and try again.
             </p>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            capture="environment"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
           <Button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => void startCamera(facingMode)}
             className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white"
           >
-            <Upload className="w-4 h-4 mr-2" />
-            Upload Photo
+            <Camera className="w-4 h-4 mr-2" />
+            Try Camera Again
           </Button>
           <Button variant="ghost" onClick={handleCancel} className="rounded-xl">
             Cancel
@@ -153,11 +135,11 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
     return (
       <div className="relative w-full h-full flex flex-col bg-black">
         {/* Target label overlay */}
-        <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/70 to-transparent p-4 pb-8">
+        {!embedded && <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/70 to-transparent p-4 pb-8">
           <p className="text-white text-center text-sm font-medium">
-            Find a <span className="font-bold text-amber-400">{targetLabel}</span>
+            Capture this clue: <span className="font-bold text-amber-400">{targetLabel}</span>
           </p>
-        </div>
+        </div>}
 
         {/* Video Preview */}
         <div className="flex-1 relative overflow-hidden">
@@ -179,7 +161,7 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
         </div>
 
         {/* Controls */}
-        <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/80 to-transparent pt-12 pb-8 px-4">
+        <div className={`absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/80 to-transparent px-4 ${embedded ? "pb-3 pt-8" : "pb-8 pt-12"}`}>
           <div className="flex items-center justify-between max-w-sm mx-auto">
             {/* Cancel */}
             <Button
@@ -195,8 +177,9 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
             {/* Shutter */}
             <button
               onClick={handleCapture}
+              disabled={hasPermission !== true}
               aria-label="Take photo"
-              className="w-18 h-18 rounded-full border-4 border-white flex items-center justify-center active:scale-90 transition-transform"
+              className="w-18 h-18 rounded-full border-4 border-white flex items-center justify-center active:scale-90 transition-transform disabled:opacity-40"
             >
               <div className="w-14 h-14 rounded-full bg-white hover:bg-gray-100 transition-colors" />
             </button>
@@ -217,23 +200,7 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
             )}
           </div>
 
-          {/* File upload fallback button */}
-          <div className="mt-4 text-center">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-white/60 text-xs underline hover:text-white/80 transition-colors"
-            >
-              Or upload from gallery
-            </button>
-          </div>
+          {!embedded && <p className="mt-4 text-center text-xs text-white/60">Live camera capture only</p>}
         </div>
 
         <canvas ref={canvasRef} className="hidden" />

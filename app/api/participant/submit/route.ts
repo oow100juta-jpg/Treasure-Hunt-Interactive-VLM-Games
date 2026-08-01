@@ -6,7 +6,6 @@ import { apiError, assertSameOrigin } from "@/lib/http";
 import { hasValidImageSignature } from "@/lib/security/image";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 
-const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxBytes = 4 * 1024 * 1024;
 const maxRequestBytes = Math.floor(4.4 * 1024 * 1024);
 
@@ -14,6 +13,9 @@ export async function POST(request: Request) {
   let uploadedPath: string | null = null;
   try {
     assertSameOrigin(request);
+    if (request.headers.get("x-capture-source") !== "browser-camera") {
+      return NextResponse.json({ error: "Take the photo with the in-browser camera." }, { status: 400 });
+    }
     const contentLength = Number(request.headers.get("content-length") ?? 0);
     if (Number.isFinite(contentLength) && contentLength > maxRequestBytes) {
       return NextResponse.json({ error: "Images must be 4 MB or smaller." }, { status: 413 });
@@ -27,15 +29,14 @@ export async function POST(request: Request) {
     });
     const form = await request.formData();
     const file = form.get("image");
-    if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "Choose a photo to submit." }, { status: 400 });
-    if (!allowedTypes.has(file.type)) return NextResponse.json({ error: "Use a JPEG, PNG, or WebP image." }, { status: 415 });
+    if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "Take a photo to submit." }, { status: 400 });
+    if (file.type !== "image/jpeg") return NextResponse.json({ error: "Camera captures must be JPEG images." }, { status: 415 });
     if (file.size > maxBytes) return NextResponse.json({ error: "Images must be 4 MB or smaller." }, { status: 413 });
     const imageBytes = new Uint8Array(await file.arrayBuffer());
     if (!hasValidImageSignature(imageBytes.subarray(0, 16), file.type)) {
-      return NextResponse.json({ error: "The uploaded file is not a valid JPEG, PNG, or WebP image." }, { status: 415 });
+      return NextResponse.json({ error: "The camera capture is not a valid JPEG image." }, { status: 415 });
     }
-    const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-    uploadedPath = `${room.id}/${team.id}/${randomUUID()}.${extension}`;
+    uploadedPath = `${room.id}/${team.id}/${randomUUID()}.jpg`;
     const { error: uploadError } = await supabase.storage.from("participant-submissions").upload(uploadedPath, imageBytes, { contentType: file.type, upsert: false });
     if (uploadError) throw uploadError;
 

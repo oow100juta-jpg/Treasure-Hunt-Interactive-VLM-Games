@@ -1,8 +1,9 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- signed/private and blob URLs are intentionally rendered without the image optimizer */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Check, ChevronRight, CircleAlert, ImagePlus, LoaderCircle, Radio, RotateCcw, Trophy, Wifi } from "lucide-react";
+import { Camera, Check, ChevronRight, CircleAlert, LoaderCircle, Radio, RotateCcw, Trophy, Wifi } from "lucide-react";
+import { CameraCapture } from "@/components/camera-capture";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Countdown } from "./countdown";
 import { NeoButton, NeoCard, StatusBadge } from "./neo";
@@ -26,7 +27,7 @@ export function PlayClient({ roomCode }: { roomCode: string }) {
   const [retryMode, setRetryMode] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -48,28 +49,44 @@ export function PlayClient({ roomCode }: { roomCode: string }) {
   }, [state?.room.id, refresh]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  function chooseFile(next: File | undefined) {
-    if (!next) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(next.type)) {
-      setError("Choose a JPEG, PNG, or WebP image.");
-      return;
+  function acceptCameraCapture(dataUrl: string) {
+    try {
+      const match = /^data:image\/jpeg;base64,(.+)$/.exec(dataUrl);
+      if (!match) throw new Error("The camera image could not be prepared. Please retake it.");
+      const binary = window.atob(match[1]);
+      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "image/jpeg" });
+      if (blob.type !== "image/jpeg" || blob.size === 0 || blob.size > 4 * 1024 * 1024) {
+        throw new Error("The camera image could not be prepared. Please retake it.");
+      }
+      const capturedFile = new File([blob], `camera-${Date.now()}.jpg`, {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+      });
+      if (preview) URL.revokeObjectURL(preview);
+      setFile(capturedFile);
+      setPreview(URL.createObjectURL(capturedFile));
+      setCameraOpen(false);
+      setError("");
+    } catch (cause) {
+      setCameraOpen(false);
+      setError(cause instanceof Error ? cause.message : "The camera image could not be prepared. Please retake it.");
     }
-    if (next.size > 4 * 1024 * 1024) {
-      setError("Images must be 4 MB or smaller.");
-      return;
-    }
+  }
+  function openCamera() {
     if (preview) URL.revokeObjectURL(preview);
-    setFile(next);
-    setPreview(URL.createObjectURL(next));
+    setFile(null);
+    setPreview(null);
     setError("");
+    setCameraOpen(true);
   }
   async function submit() {
     if (!file) return; setBusy(true); setError("");
     const form = new FormData(); form.set("image", file);
     try {
-      const response = await fetch("/api/participant/submit", { method: "POST", body: form });
+      const response = await fetch("/api/participant/submit", { method: "POST", headers: { "X-Capture-Source": "browser-camera" }, body: form });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Submission failed.");
-      setRetryMode(false); setFile(null); if (preview) URL.revokeObjectURL(preview); setPreview(null); await refresh();
+      setRetryMode(false); setCameraOpen(false); setFile(null); if (preview) URL.revokeObjectURL(preview); setPreview(null); await refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Submission failed."); await refresh(); }
     finally { setBusy(false); }
   }
@@ -85,14 +102,13 @@ export function PlayClient({ roomCode }: { roomCode: string }) {
   if (state.phase === "ended") return <EndingScreen state={state} />;
   if (state.phase === "lobby") return <WaitingScreen state={state} error={error} />;
   if (state.phase === "active_leaderboard_frozen" && !state.team.freezeAcknowledged) return <FreezeScreen onContinue={acknowledge} busy={busy} />;
-
   const header = <GameHeader state={state} refresh={refresh} />;
   if (state.team.status === "viewing_leaderboard" && state.phase === "active_leaderboard_visible") return <>{header}<LeaderboardScreen state={state} onContinue={() => advance()} busy={busy} /></>;
   if (state.team.status === "accepted" && state.submission?.decision === "accepted") return <>{header}<ResultScreen state={state} accepted onAction={() => advance(state.phase === "active_leaderboard_visible" ? "leaderboard" : undefined)} busy={busy} /></>;
   if (state.team.status === "reviewing" || busy) return <>{header}<ReviewScreen state={state} preview={preview} /></>;
   if (!retryMode && (state.team.status === "rejected" || state.submission?.evaluationStatus === "failed")) return <>{header}<ResultScreen state={state} accepted={false} onAction={() => { setRetryMode(true); setFile(null); setPreview(null); }} busy={busy} /></>;
   if (state.team.status === "completed_all") return <>{header}<CompletedAllScreen /></>;
-  return <>{header}<ClueScreen state={state} fileRef={fileRef} preview={preview} error={error} chooseFile={chooseFile} submit={submit} clear={() => { setFile(null); setPreview(null); }} busy={busy} /></>;
+  return <>{header}<ClueScreen state={state} preview={preview} error={error} cameraOpen={cameraOpen} openCamera={openCamera} closeCamera={() => setCameraOpen(false)} acceptCameraCapture={acceptCameraCapture} submit={submit} busy={busy} /></>;
 }
 
 function GameHeader({ state, refresh }: { state: State; refresh: () => void }) {
@@ -104,9 +120,46 @@ function WaitingScreen({ state, error }: { state: State; error: string }) { retu
 function FreezeScreen({ onContinue, busy }: { onContinue: () => void; busy: boolean }) { return <main className="participant-page justify-center"><div className="mx-auto max-w-md"><p className="kicker mb-5">A quick update</p><h1 className="display text-6xl leading-[.9]">The Leaderboard is Frozen</h1><NeoCard className="mt-9 bg-kcv-yellow p-6"><Trophy className="mb-5" size={34} /><p className="font-bold leading-relaxed">You can still complete more clues and earn points, but rankings will no longer be shown. The winner will be announced after the game ends.</p></NeoCard><NeoButton onClick={onContinue} disabled={busy} className="mt-10 w-full">Keep hunting <ChevronRight /></NeoButton></div></main>; }
 function EndingScreen({ state }: { state: State }) { return <main className="participant-page justify-center"><div className="mx-auto max-w-md"><p className="kicker">Time’s up</p><h1 className="display mt-4 whitespace-pre-line text-6xl leading-[.9]">{state.room.endingTitle}</h1><p className="mt-8 text-lg leading-relaxed text-zinc-600">{state.room.endingMessage}</p>{state.room.meetingLocation && <NeoCard className="mt-8 bg-kcv-blue p-6 text-white"><p className="text-xs font-black uppercase tracking-widest">Meet us at</p><p className="display mt-2 text-3xl">{state.room.meetingLocation}</p></NeoCard>}<div className="mt-12 flex gap-8 border-t-2 border-black pt-6"><div><b className="display text-3xl">{state.team.completedClueCount}</b><p className="text-xs uppercase">clues found</p></div><div><b className="display text-3xl">{state.team.totalScore}</b><p className="text-xs uppercase">total points</p></div></div></div></main>; }
 
-function ClueScreen({ state, fileRef, preview, error, chooseFile, submit, clear, busy }: { state: State; fileRef: React.RefObject<HTMLInputElement | null>; preview: string | null; error: string; chooseFile: (file?: File) => void; submit: () => void; clear: () => void; busy: boolean }) {
+function ClueScreen({ state, preview, error, cameraOpen, openCamera, closeCamera, acceptCameraCapture, submit, busy }: { state: State; preview: string | null; error: string; cameraOpen: boolean; openCamera: () => void; closeCamera: () => void; acceptCameraCapture: (dataUrl: string) => void; submit: () => void; busy: boolean }) {
   if (!state.assignment) return <CompletedAllScreen />;
-  return <main className="participant-page"><div className="mx-auto w-full max-w-md"><div className="flex items-center justify-between"><p className="kicker">Clue {state.assignment.sequenceNumber}</p><StatusBadge tone={state.assignment.clue.difficulty === "hard" ? "red" : state.assignment.clue.difficulty === "medium" ? "orange" : "green"}>{state.assignment.clue.difficulty}</StatusBadge></div><h1 className="display mt-5 text-5xl">The clue is…</h1><NeoCard className="mt-7 p-6"><p className="display text-2xl leading-tight">{state.assignment.clue.text}</p></NeoCard><div className="mt-9 overflow-hidden rounded-[2rem] border-2 border-black bg-zinc-100 aspect-[4/3]">{preview ? <img src={preview} alt="Your selected submission" className="h-full w-full object-cover" /> : <button onClick={() => fileRef.current?.click()} className="flex h-full w-full flex-col items-center justify-center gap-3 text-zinc-500"><div className="rounded-full border-2 border-black bg-white p-5 text-black"><Camera size={30} /></div><span className="text-sm font-bold">Capture or choose a photo (max 4 MB)</span></button>}</div><input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={(e) => chooseFile(e.target.files?.[0])} /><p className="mt-4 min-h-5 text-sm font-semibold text-red-700" role="alert">{error}</p>{preview ? <div className="mt-3 grid grid-cols-2 gap-3"><button onClick={clear} className="secondary-button"><RotateCcw size={18} /> Retake</button><NeoButton onClick={submit} disabled={busy}>Submit <ChevronRight /></NeoButton></div> : <div className="mt-3 grid grid-cols-2 gap-3"><button onClick={() => fileRef.current?.click()} className="secondary-button"><Camera size={18} /> Camera</button><button onClick={() => { fileRef.current?.removeAttribute("capture"); fileRef.current?.click(); }} className="secondary-button"><ImagePlus size={18} /> Upload</button></div>}<div className="mt-8 flex justify-between border-t border-zinc-300 pt-4 text-xs font-bold text-zinc-500"><span>Attempt {state.assignment.attemptCount + 1}</span><span>{state.team.completedClueCount} completed · {state.team.totalScore} pts</span></div></div></main>;
+  return (
+    <main className="participant-page">
+      <div className="mx-auto w-full max-w-md">
+        <div className="flex items-center justify-between">
+          <p className="kicker">Clue {state.assignment.sequenceNumber}</p>
+          <StatusBadge tone={state.assignment.clue.difficulty === "hard" ? "red" : state.assignment.clue.difficulty === "medium" ? "orange" : "green"}>{state.assignment.clue.difficulty}</StatusBadge>
+        </div>
+        <h1 className="display mt-5 text-5xl">The clue is…</h1>
+        <NeoCard className="mt-7 p-6"><p className="display text-2xl leading-tight">{state.assignment.clue.text}</p></NeoCard>
+        <div className="mt-9 overflow-hidden rounded-[2rem] border-2 border-black bg-zinc-100 aspect-[4/3]">
+          {cameraOpen ? (
+            <CameraCapture embedded targetLabel={state.assignment.clue.text} onCapture={acceptCameraCapture} onCancel={closeCamera} />
+          ) : preview ? (
+            <img src={preview} alt="Your camera capture" className="h-full w-full object-cover" />
+          ) : (
+            <button onClick={openCamera} className="flex h-full w-full flex-col items-center justify-center gap-3 text-zinc-500">
+              <div className="rounded-full border-2 border-black bg-white p-5 text-black"><Camera size={30} /></div>
+              <span className="text-sm font-bold">Open the live camera</span>
+              <span className="text-xs">Camera capture only · max 4 MB</span>
+            </button>
+          )}
+        </div>
+        <p className="mt-4 min-h-5 text-sm font-semibold text-red-700" role="alert">{error}</p>
+        {!cameraOpen && (preview ? (
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <button onClick={openCamera} className="secondary-button"><RotateCcw size={18} /> Retake</button>
+            <NeoButton onClick={submit} disabled={busy}>Submit <ChevronRight /></NeoButton>
+          </div>
+        ) : (
+          <NeoButton onClick={openCamera} className="mt-3 w-full"><Camera size={18} /> Open camera</NeoButton>
+        ))}
+        <div className="mt-8 flex justify-between border-t border-zinc-300 pt-4 text-xs font-bold text-zinc-500">
+          <span>Attempt {state.assignment.attemptCount + 1}</span>
+          <span>{state.team.completedClueCount} completed · {state.team.totalScore} pts</span>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 function ReviewScreen({ state, preview }: { state: State; preview: string | null }) { const image = preview || state.submission?.imageUrl; return <main className="participant-page"><div className="mx-auto w-full max-w-md text-center"><p className="kicker">Attempt {state.submission?.attemptNumber ?? state.assignment?.attemptCount}</p><h1 className="display mt-4 text-5xl">AI is reviewing your submission</h1>{image && <div className="relative mt-8 overflow-hidden rounded-[2rem] border-2 border-black aspect-square"><img src={image} alt="Submitted object" className="h-full w-full object-cover opacity-70" /><div className="scan-line" /></div>}<div className="mt-8 flex items-center justify-center gap-3 font-bold"><LoaderCircle className="animate-spin" /> Looking for a semantic match…</div><p className="mt-3 text-sm text-zinc-500">Keep this page open. Duplicate submissions are disabled.</p></div></main>; }
