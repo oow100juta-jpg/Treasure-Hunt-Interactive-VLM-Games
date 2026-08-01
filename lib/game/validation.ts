@@ -27,6 +27,28 @@ export const overrideSchema = z.object({
   reason: z.string().trim().min(3).max(500),
 });
 
+export const newClueSchema = z.object({
+  mode: z.literal("new"),
+  text: z.string().trim().min(5).max(240),
+  difficulty: z.enum(["easy", "medium", "hard"]),
+  category: z.string().trim().min(2).max(60),
+  expectedObjects: z.array(z.string().trim().min(1).max(80)).max(20)
+    .transform((items) => [...new Set(items.map((item) => item.toLocaleLowerCase()))]),
+});
+
+export const existingClueSchema = z.object({
+  mode: z.literal("existing"),
+  clueId: z.string().uuid(),
+});
+
+export const addRoomClueSchema = z.discriminatedUnion("mode", [newClueSchema, existingClueSchema]);
+
+export const removeRoomClueSchema = z.object({ clueId: z.string().uuid() });
+
+export const deleteRoomSchema = z.object({
+  confirmation: z.string().trim().min(3).max(12).transform((value) => value.toUpperCase()),
+});
+
 export function normalizeTeamName(name: string) {
   return name.trim().toLocaleLowerCase().replace(/\s+/g, " ");
 }

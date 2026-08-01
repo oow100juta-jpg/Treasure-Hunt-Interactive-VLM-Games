@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getGamePhase, calculateGameTimestamps, isParticipantLeaderboardVisible } from "../lib/game/phase";
 import { calculateScore } from "../lib/game/scoring";
 import { rankTeams } from "../lib/game/leaderboard";
-import { roomSchema } from "../lib/game/validation";
+import { addRoomClueSchema, deleteRoomSchema, removeRoomClueSchema, roomSchema } from "../lib/game/validation";
 
 describe("room timing and phase", () => {
   const base = { name:"Test", code:"TEST", maximumTeams:10, gameDurationMinutes:30, leaderboardVisibleMinutes:20, clueProgressionStrategy:"easy_to_hard" as const, endingTitle:"Done", endingMessage:"", meetingLocation:"", finalLeaderboardVisible:false };
@@ -18,4 +18,25 @@ describe("room timing and phase", () => {
 describe("scoring and ranking",()=>{
   it("scores attempts with floors and multipliers",()=>{expect(calculateScore(1,"easy")).toBe(100);expect(calculateScore(2,"medium")).toBe(108);expect(calculateScore(9,"hard")).toBe(90)});
   it("uses deterministic leaderboard tie breakers",()=>{const rows=rankTeams([{id:"b",name:"Beta",totalScore:100,completedClueCount:1,totalAttemptCount:3,acceptedFirstTryCount:0,latestCompletionAt:"2026-01-01T00:03:00Z"},{id:"a",name:"Alpha",totalScore:100,completedClueCount:1,totalAttemptCount:2,acceptedFirstTryCount:0,latestCompletionAt:"2026-01-01T00:04:00Z"}]);expect(rows[0].id).toBe("a");expect(rows[0].rank).toBe(1)});
+});
+
+describe("room clue management validation", () => {
+  it("accepts a sanitized new clue", () => {
+    const result = addRoomClueSchema.safeParse({ mode: "new", text: "Find a red object.", difficulty: "easy", category: "Color", expectedObjects: [" Apple ", "apple", "Ball"] });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.mode === "new") expect(result.data.expectedObjects).toEqual(["apple", "ball"]);
+  });
+  it("rejects malformed clue identifiers", () => {
+    expect(addRoomClueSchema.safeParse({ mode: "existing", clueId: "not-a-uuid" }).success).toBe(false);
+    expect(removeRoomClueSchema.safeParse({ clueId: "not-a-uuid" }).success).toBe(false);
+  });
+});
+
+describe("room deletion validation", () => {
+  it("normalizes a typed room-code confirmation", () => {
+    expect(deleteRoomSchema.parse({ confirmation: " kcv26 " }).confirmation).toBe("KCV26");
+  });
+  it("rejects missing confirmation", () => {
+    expect(deleteRoomSchema.safeParse({ confirmation: "" }).success).toBe(false);
+  });
 });

@@ -34,9 +34,15 @@ export type Database = {
         Relationships: [];
       };
       clues: {
-        Row: { id: string; text: string; difficulty: Difficulty; category: string; expected_objects: Json; weight: number; order_group: number | null; is_active: boolean; created_at: string; updated_at: string };
-        Insert: { id?: string; text: string; difficulty: Difficulty; category: string; expected_objects?: Json; weight?: number; order_group?: number | null; is_active?: boolean };
+        Row: { id: string; text: string; difficulty: Difficulty; category: string; expected_objects: Json; weight: number; order_group: number | null; is_active: boolean; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; text: string; difficulty: Difficulty; category: string; expected_objects?: Json; weight?: number; order_group?: number | null; is_active?: boolean; created_by?: string | null };
         Update: Partial<Database["public"]["Tables"]["clues"]["Insert"]>;
+        Relationships: [];
+      };
+      room_clues: {
+        Row: { room_id: string; clue_id: string; added_at: string };
+        Insert: { room_id: string; clue_id: string; added_at?: string };
+        Update: never;
         Relationships: [];
       };
       clue_assignments: {
