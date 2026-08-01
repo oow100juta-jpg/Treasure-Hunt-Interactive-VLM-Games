@@ -2,7 +2,8 @@ import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function NeoCard({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("neo-card", className)} {...props} />;
+  const hasBackgroundClass = className?.split(/\s+/).some((name) => name.startsWith("bg-") || name.startsWith("!bg-"));
+  return <div className={cn("neo-card", !hasBackgroundClass && "bg-white", className)} {...props} />;
 }
 
 export function NeoButton({ className, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {

@@ -139,7 +139,7 @@ button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 .display { font-family: Impact, Haettenschweiler, "Arial Narrow Bold", var(--font-geist-sans), sans-serif; font-weight: 900; letter-spacing: -.025em; }
 .kicker { font-size: .7rem; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
-.neo-card { border: 2px solid #111; border-radius: 1.5rem; background: white; box-shadow: 6px 7px 0 #a9a9b2; }
+.neo-card { border: 2px solid #111; border-radius: 1.5rem; box-shadow: 6px 7px 0 #a9a9b2; }
 .neo-button { min-height: 3.25rem; display: inline-flex; align-items: center; justify-content: center; gap: .6rem; border: 2px solid #111; border-radius: 999px; background: #4f8df7; color: #111; padding: .72rem 1.35rem; font-weight: 900; box-shadow: 4px 5px 0 #2f2c7a; transition: transform .15s, box-shadow .15s; }
 .neo-button:hover:not(:disabled) { transform: translate(-1px,-1px); box-shadow: 6px 7px 0 #2f2c7a; }
 .neo-button:active:not(:disabled) { transform: translate(3px,3px); box-shadow: 1px 1px 0 #2f2c7a; }
