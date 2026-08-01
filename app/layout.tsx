@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "KCV Vision Hunt", template: "%s · KCV Vision Hunt" },
+  title: { default: "Vision Hunt", template: "%s · KCV Vision Hunt" },
   description:
     "A real-time team scavenger hunt powered by vision-language AI.",
   keywords: [
