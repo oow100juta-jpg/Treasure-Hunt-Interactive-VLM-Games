@@ -1,172 +1,104 @@
-# AI Bingo Treasure Hunter 🎯
+# KCV Vision Hunt
 
-A mobile-first web application for group treasure hunt games. Teams compete to find real-world objects matching a 3×3 bingo card, photograph them, and let a Vision Language Model (VLM) verify the match through the Hugging Face Inference API.
+KCV Vision Hunt is a production-structured, mobile-first team scavenger hunt. An administrator opens a room, teams join with a room code, and one database timestamp starts the game for everyone. Teams then progress independently through semantic clues while a configurable vision-language provider evaluates private image submissions.
 
-## Features
+## Architecture
 
-- **3×3 Bingo Card** — 9 objects to find in the real world
-- **Camera Integration** — Take photos directly from the browser using `getUserMedia`
-- **AI Verification** — Vision Language Model validates whether the photo matches the target object
-- **Team Progress** — localStorage-based persistence survives refreshes and tab closures
-- **Bingo Detection** — Automatic detection of winning lines (rows, columns, diagonals)
-- **Celebration Screen** — Confetti and stats when a team achieves bingo
-- **Mock Mode** — Development without an API token using `USE_MOCK_VLM=true`
-- **File Upload Fallback** — When camera access is denied or unavailable
+- **Next.js 16 App Router** on Vercel: Server Components for initial/admin authorization, Client Components for camera and live game UI, and Route Handlers for trusted mutations.
+- **Supabase PostgreSQL** is the source of truth. Database functions lock rows and make start, end, submission creation, acceptance, scoring, and next-clue assignment idempotent.
+- **Supabase Auth** protects administrators. Participants use a server-generated opaque token in a secure HTTP-only cookie; only its SHA-256 hash is stored.
+- **Supabase Storage** keeps participant images in the private `participant-submissions` bucket. Signed URLs are short-lived.
+- **Supabase Realtime** wakes participant clients on room phase changes and keeps the authenticated admin dashboard current. Periodic refetching provides reconnection recovery.
+- **Vision providers** implement one interface. `mock`, generic OpenAI-compatible, and Hugging Face-compatible modes are selected through environment variables.
 
-## Tech Stack
+The participant experience is intentionally a single state-derived route, `/play/[roomCode]`. On refresh, the UI derives the correct lobby, clue, review, result, leaderboard, freeze, or ending screen from database state rather than transient browser events.
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 15 (App Router) |
-| Language | TypeScript |
-| Styling | Tailwind CSS v4 |
-| UI Components | shadcn/ui |
-| Icons | Lucide React |
-| Validation | Zod |
-| VLM API | Hugging Face Inference API (OpenAI-compatible) |
-| Camera | Browser `getUserMedia` API |
-| Persistence | localStorage |
+## Local setup
 
-## Getting Started
+1. Install dependencies: `npm install`
+2. Create a Supabase project.
+3. Copy `.env.example` to `.env.local` and fill in the values.
+4. Apply `supabase/migrations/202607310001_kcv_vision_hunt.sql` in the Supabase SQL editor or with `supabase db push`.
+5. Seed clues with `supabase/seed.sql` or `supabase db reset` when using the local Supabase CLI.
+6. Create an admin user and profile as described below.
+7. Run `npm run dev` and open `http://localhost:3000`.
 
-### Prerequisites
+## Environment variables
 
-- Node.js 18+
-- npm
-- A Hugging Face account with API token (or use Mock Mode)
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are intentionally browser-visible. Row Level Security limits that key.
 
-### Installation
+`SUPABASE_SERVICE_ROLE_KEY`, `PARTICIPANT_TOKEN_SECRET`, `VISION_API_KEY`, and any provider URL/model configuration are server-only. Never add `NEXT_PUBLIC_` to them. Use a cryptographically random secret of at least 32 characters for participant tokens.
+
+### Vision modes
+
+- `VISION_PROVIDER=mock` is the development default. It exercises the real upload, persistence, score, and progression pipeline without a paid model.
+- `VISION_PROVIDER=openai` uses the OpenAI-compatible chat completions API. Configure `VISION_API_KEY` and optionally `VISION_API_URL` / `VISION_MODEL`.
+- `VISION_PROVIDER=huggingface` uses the same compatible adapter. Set `VISION_API_URL=https://router.huggingface.co/v1`, a Hugging Face token in `VISION_API_KEY`, and a compatible vision model in `VISION_MODEL`.
+
+Mock decisions fail closed in production unless `ALLOW_MOCK_VISION_IN_PRODUCTION=true` is explicitly configured. Leave that override disabled for a real event. The previous local-only `/game` prototype and its unauthenticated validation endpoint return 404 in production.
+
+Provider failures never auto-accept. The submission is marked failed, the team may retry, and an administrator can inspect it.
+
+## Supabase configuration
+
+The migration creates all tables, constraints, transaction functions, RLS policies, the private Storage bucket, and Realtime publication entries. In **Database → Replication**, verify that `game_rooms`, `teams`, `clue_assignments`, `submissions`, and `score_events` are enabled if your project overrides publication settings.
+
+The service-role client is used only in server-only modules for participant token verification and narrowly scoped participant operations. Browser code never receives the service-role key.
+
+### Create an administrator
+
+1. Create a user in **Authentication → Users** (email/password).
+2. Insert its UUID into the profile table:
+
+```sql
+insert into public.profiles (id, display_name, role)
+values ('AUTH-USER-UUID', 'Game Host', 'admin');
+```
+
+The user can then sign in at `/admin/login`, create a room, and use the room dashboard. A room cannot start with zero teams; repeated Start and End requests are safe.
+
+## Game rules and security
+
+The database computes `started_at`, `leaderboard_freezes_at`, and `ends_at` from `clock_timestamp()`. Browser countdowns are display-only. Submission eligibility and evaluation finalization compare database time to the global end. Scores are immutable events and follow 100/90/80/70/60 points by attempt, multiplied by easy 1.0, medium 1.2, or hard 1.5.
+
+Teams have at most one open assignment, never repeat a clue, and receive the next assignment transactionally after acceptance. That assignment stays unrevealed until the result/leaderboard step is finished. The participant leaderboard disappears at the freeze timestamp; the admin leaderboard remains available. Freeze acknowledgment is persisted per team.
+
+RLS prevents anonymous database writes and limits authenticated administrators to rooms they own. Participant endpoints validate the HTTP-only token against its stored hash on every operation, so a client-supplied team ID is never trusted.
+
+## Quality checks
 
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd objectdetection
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env.local
+npm run typecheck
+npm run lint
+npm test
+npm run build
 ```
 
-### Environment Variables
+The Vitest suite covers timing validation, server phase calculation, idempotent start/end/acceptance, one active assignment, non-repeating clues, score rules, deterministic ties, freeze visibility, participant isolation, admin access, overrides, ended-game blocking, and clue exhaustion.
 
-Edit `.env.local`:
+## Deploy to Vercel
 
-```env
-# Required: Your Hugging Face API token
-HUGGINGFACE_API_TOKEN=hf_your_token_here
+1. Import the repository into Vercel.
+2. Add every `.env.example` variable in Project Settings. Mark `SUPABASE_SERVICE_ROLE_KEY`, `PARTICIPANT_TOKEN_SECRET`, and `VISION_API_KEY` as Sensitive for Production and Preview. Never prefix them with `NEXT_PUBLIC_`.
+3. Use a separate Supabase project for untrusted Preview deployments, or omit server secrets from Preview entirely. Do not expose production service-role or model credentials to arbitrary preview branches.
+4. Apply all migrations and the seed before deploying: `npx supabase db push --include-seed`. The production-security migration is required by the API rate limiter.
+5. In Supabase Authentication settings, disable public email signups after creating the host accounts, require strong passwords, and enable MFA for administrators when your plan supports it. Configure the production Site URL and allowed redirect URLs.
+6. Deploy with the default Next.js build command. Vercel must serve the app over HTTPS for secure participant cookies and camera access.
+7. Confirm admin sign-in, room ownership isolation, team joining, Realtime start/end transitions, private signed images, rejection of files over 4 MB, and real-provider evaluation on a mobile device.
 
-# Required: The VLM model to use
-HUGGINGFACE_MODEL_ID=google/gemma-4-31B-it:novita
+### Production security notes
 
-# Optional: Enable mock mode for development without API
-USE_MOCK_VLM=false
-```
+- Server-only credentials are isolated behind `server-only` modules and are never returned by an API response. The anon/publishable key is intentionally public and relies on RLS.
+- Mutations enforce same-origin browser requests. Participant cookies are HTTP-only, Secure in production, SameSite=Lax, and use the `__Host-` prefix.
+- Join and AI-submission limits are stored in Supabase so they work across Vercel function instances. Uploaded content is checked by size, MIME allowlist, and binary file signature.
+- AI provider failures return generic client messages. Raw provider/database errors remain in server logs rather than responses or submission records.
+- Security headers include CSP, clickjacking protection, MIME sniffing protection, a restrictive permissions policy, and HSTS.
+- Run `npm audit`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before every production release.
 
-### Running
+## Current MVP limitations
 
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) on your phone or browser.
-
-## How to Change the VLM Model
-
-Edit the `HUGGINGFACE_MODEL_ID` in `.env.local`. The app uses the [Hugging Face Router](https://huggingface.co/docs/api-inference/en/index) with an OpenAI-compatible API, so any model accessible through the router will work.
-
-**Recommended models:**
-
-| Model | Provider Suffix |
-|-------|----------------|
-| Google Gemma 4 31B | `google/gemma-4-31B-it:novita` |
-| Qwen 2.5 VL 72B | `Qwen/Qwen2.5-VL-72B-Instruct` |
-| Meta Llama 4 Scout | `meta-llama/Llama-4-Scout-17B-16E-Instruct` |
-
-The model must support vision (image input) and text output in JSON format.
-
-## How to Customize Bingo Tiles
-
-Edit the file `lib/bingo-data.ts`. The `BINGO_TILES` array contains 9 tile definitions:
-
-```ts
-{
-  id: "bottle",           // Unique identifier
-  label: "Bottle",        // Display name
-  description: "Find a drinking bottle.",  // Instructions
-  acceptedTerms: [        // Terms the VLM checks against
-    "bottle", "water bottle", "drinking bottle"
-  ],
-  icon: "Wine",           // Lucide icon name
-}
-```
-
-**Rules:**
-- Keep exactly 9 tiles for the 3×3 grid
-- Each `id` must be unique
-- `icon` must be a valid [Lucide icon name](https://lucide.dev/icons)
-- `acceptedTerms` helps the VLM understand what counts as a match
-
-## Project Structure
-
-```
-app/
-  page.tsx                      → Team login (/)
-  game/
-    page.tsx                    → Bingo grid (/game)
-    tile/[tileId]/page.tsx      → Camera + validation (/game/tile/bottle)
-  api/validate-object/route.ts  → VLM proxy API
-
-components/
-  team-login-form.tsx           → Login form with validation
-  game-header.tsx               → Header with team menu
-  progress-summary.tsx          → Progress bar
-  bingo-grid.tsx                → 3×3 grid container
-  bingo-tile.tsx                → Individual tile
-  camera-capture.tsx            → Camera with getUserMedia
-  image-preview.tsx             → Photo review before submit
-  validation-result.tsx         → Success/failure display
-  bingo-celebration.tsx         → Win screen with confetti
-  reset-progress-dialog.tsx     → Reset confirmation
-
-lib/
-  bingo-data.ts                 → Tile definitions (config)
-  bingo-utils.ts                → Win detection logic
-  storage.ts                    → localStorage abstraction
-  image-utils.ts                → Image compression
-  huggingface.ts                → HF API client (server-only)
-  validation-schema.ts          → Zod schemas
-```
-
-## Mock Mode
-
-Set `USE_MOCK_VLM=true` in `.env.local` to run without a Hugging Face token. In mock mode:
-
-- The API simulates VLM responses with random success/failure
-- A ~2-second delay simulates API latency
-- No external API calls are made
-
-This is useful for UI development and demonstrations.
-
-## Security
-
-- The Hugging Face token **never** leaves the server — all API calls go through the Next.js server route at `/api/validate-object`
-- Images are validated for MIME type (JPEG, PNG, WebP only) and size
-- Input is sanitized and validated with Zod
-- Basic per-IP rate limiting (15 requests/minute)
-- Photos are not stored — they are used for inference only and discarded
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|---------|
-| Camera not working | Check browser permissions. Use HTTPS in production. |
-| "Model is loading" error | Wait ~30s for cold start, then retry. |
-| API timeout | The model may be overloaded. Try again later. |
-| Progress lost | Check if localStorage was cleared. Incognito mode does not persist. |
-| Tiles not updating after validation | Refresh the page — progress is saved to localStorage. |
-
-## License
-
-MIT
+- Vision evaluation runs inside the submission request. For high-volume events, move evaluation to a durable queue/worker while keeping the same provider and database function interfaces.
+- Presence is inferred from participant heartbeats/requests (45-second online window), not a dedicated Supabase Presence channel.
+- Room settings are configured at creation. Direct editing of timing settings after teams join is intentionally omitted to avoid changing live-game rules.
+- An accepted submission can be manually reversed while its transactionally assigned next clue is still hidden; its score is reversed with an immutable audit event. Once the team reveals or progresses into the next clue, reversal is blocked to protect assignment integrity. Rejected or failed active submissions can be manually accepted safely.
+- Participant phase wake-ups use public UUID-scoped Realtime broadcast topics and contain no game data; clients always fetch authorized state afterward. Authenticated admin database-change subscriptions remain protected by room-owner RLS.

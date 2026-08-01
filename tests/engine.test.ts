@@ -1,0 +1,18 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { acceptEngineSubmission, assignEngineClue, boardAccess, canSubmit, endEngineGame, overrideDecision, participantCanReadAssignment, participantCanUpdateScore, shouldShowFreezeNotice, startEngineGame, type EngineState } from "../lib/game/engine";
+
+let state:EngineState;
+beforeEach(()=>{state={room:{id:"r",status:"lobby",duration:1800,leaderboardDuration:1200,startedAt:null,freezesAt:null,endsAt:null},teams:[{id:"a",roomId:"r",score:0,completed:0,freezeAcknowledged:false},{id:"b",roomId:"r",score:0,completed:0,freezeAcknowledged:false}],clues:[{id:"1",difficulty:"easy",active:true},{id:"2",difficulty:"medium",active:true}],assignments:[],processedSubmissionIds:new Set()}});
+describe("transactional game engine invariants",()=>{
+  it("starts once and gives every team the shared start",()=>{const now=new Date();expect(startEngineGame(state,now).idempotent).toBe(false);expect(state.assignments).toHaveLength(2);expect(startEngineGame(state,new Date(now.getTime()+1000)).idempotent).toBe(true);expect(state.room.startedAt).toBe(now.toISOString())});
+  it("ends idempotently",()=>{startEngineGame(state,new Date());expect(endEngineGame(state,new Date()).idempotent).toBe(false);expect(endEngineGame(state,new Date()).idempotent).toBe(true)});
+  it("never creates two active clues for one team",()=>{state.room.status="active";const first=assignEngineClue(state,"a");expect(assignEngineClue(state,"a")).toBe(first);expect(state.assignments.filter(a=>a.teamId==="a")).toHaveLength(1)});
+  it("never repeats a completed clue",()=>{state.room.status="active";const first=assignEngineClue(state,"a")!;first.status="completed";const next=assignEngineClue(state,"a")!;expect(next.clueId).not.toBe(first.clueId)});
+  it("accepted processing and next assignment are idempotent",()=>{startEngineGame(state,new Date());const assignment=state.assignments.find(a=>a.teamId==="a")!;const first=acceptEngineSubmission(state,"s1",assignment.id);const second=acceptEngineSubmission(state,"s1",assignment.id);expect(first.idempotent).toBe(false);expect(second.idempotent).toBe(true);expect(state.teams[0].completed).toBe(1);expect(state.assignments.filter(a=>a.teamId==="a"&&a.status==="active")).toHaveLength(1)});
+  it("blocks submissions after the global end",()=>{startEngineGame(state,new Date("2026-01-01T00:00:00Z"));expect(canSubmit(state,state.assignments[0].id,new Date("2026-01-01T00:31:00Z"))).toBe(false)});
+  it("enforces participant assignment isolation",()=>{state.room.status="active";const assignment=assignEngineClue(state,"a")!;expect(participantCanReadAssignment("a",assignment)).toBe(true);expect(participantCanReadAssignment("b",assignment)).toBe(false);expect(participantCanUpdateScore()).toBe(false)});
+  it("shows the freeze notice once",()=>{expect(shouldShowFreezeNotice("active_leaderboard_frozen",false)).toBe(true);expect(shouldShowFreezeNotice("active_leaderboard_frozen",true)).toBe(false)});
+  it("keeps the admin board visible after freeze",()=>{expect(boardAccess("active_leaderboard_frozen",true)).toBe(true);expect(boardAccess("active_leaderboard_frozen",false)).toBe(false)});
+  it("requires an override reason and records admin source",()=>{expect(()=>overrideDecision({previous:"rejected",decision:"accepted",reason:""})).toThrow();expect(overrideDecision({previous:"rejected",decision:"accepted",reason:"Visible match"}).source).toBe("admin")});
+  it("returns no assignment when clues are exhausted",()=>{state.room.status="active";state.clues=[{id:"1",difficulty:"easy",active:true}];const first=assignEngineClue(state,"a")!;first.status="completed";expect(assignEngineClue(state,"a")).toBeNull()});
+});

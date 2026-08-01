@@ -1,3 +1,4 @@
+import "server-only";
 import OpenAI from "openai";
 import type { ValidationRequest, ValidationResponse } from "@/types/bingo";
 import { parseVLMResponse } from "./validation-schema";

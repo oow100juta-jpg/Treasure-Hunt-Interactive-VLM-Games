@@ -26,6 +26,9 @@ function checkRateLimit(ip: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return new NextResponse(null, { status: 404 });
+  }
   try {
     // Rate limiting
     const ip =

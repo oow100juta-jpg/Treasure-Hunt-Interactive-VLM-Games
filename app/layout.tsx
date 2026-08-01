@@ -13,11 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Bingo Treasure Hunter",
+  title: { default: "KCV Vision Hunt", template: "%s · KCV Vision Hunt" },
   description:
-    "A mobile-first treasure hunt game. Find real objects, snap photos, and let AI verify them to complete your bingo card!",
+    "A real-time team scavenger hunt powered by vision-language AI.",
   keywords: [
-    "bingo",
+    "scavenger hunt",
     "treasure hunt",
     "AI",
     "computer vision",
@@ -33,7 +33,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#7c3aed",
+  themeColor: "#ffd34e",
 };
 
 export default function RootLayout({
@@ -46,7 +46,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }

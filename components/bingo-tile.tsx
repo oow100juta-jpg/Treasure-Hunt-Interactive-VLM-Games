@@ -15,7 +15,7 @@ interface BingoTileProps {
 
 // Dynamic icon lookup
 function getTileIcon(iconName: string) {
-  const Icon = (LucideIcons as Record<string, React.ComponentType<{ className?: string }>>)[iconName];
+  const Icon = (LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[iconName];
   return Icon ?? LucideIcons.HelpCircle;
 }
 

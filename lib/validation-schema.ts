@@ -38,7 +38,7 @@ export function parseVLMResponse(raw: string): z.infer<typeof vlmResponseSchema>
   }
 
   // Strip markdown code fences
-  let cleaned = raw
+  const cleaned = raw
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")

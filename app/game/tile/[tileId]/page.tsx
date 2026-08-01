@@ -58,6 +58,7 @@ export default function TileDetailPage() {
   // Cleanup camera on unmount
   useEffect(() => {
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- teardown must use the live imperative camera handle
       cameraRef.current?.stopCamera();
     };
   }, []);
