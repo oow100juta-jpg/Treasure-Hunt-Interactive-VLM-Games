@@ -55,7 +55,7 @@ export async function GET(_: Request, context: { params: Promise<{ roomId: strin
       };
     }));
     const phase = getGamePhase({ status: room.status, startedAt: room.started_at, leaderboardFreezesAt: room.leaderboard_freezes_at, endsAt: room.ends_at, endedAt: room.ended_at });
-    return NextResponse.json({ room, phase, teams, leaderboard, submissions });
+    return NextResponse.json({ serverNow: new Date().toISOString(), room, phase, teams, leaderboard, submissions });
   } catch (error) { return apiError(error); }
 }
 

@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     if (error) {
       if (error.code === "23505") return NextResponse.json({ error: "That team name is already taken in this room." }, { status: 409 });
       if (error.message.includes("Room not found")) return NextResponse.json({ error: "Room not found. Check the code and try again." }, { status: 404 });
-      if (error.message.includes("Game already started")) return NextResponse.json({ error: "This game has already started." }, { status: 409 });
+      if (error.message.includes("Game has ended")) return NextResponse.json({ error: "This game has already ended." }, { status: 409 });
       if (error.message.includes("Registration closed")) return NextResponse.json({ error: "Registration is closed for this room." }, { status: 409 });
       if (error.message.includes("Room team limit reached")) return NextResponse.json({ error: "This room has reached its team limit." }, { status: 409 });
       throw error;
