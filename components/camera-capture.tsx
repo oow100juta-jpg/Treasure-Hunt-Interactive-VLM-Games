@@ -92,7 +92,7 @@ export const CameraCapture = forwardRef<CameraCaptureHandle, CameraCaptureProps>
       }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
       stopStream();
       onCapture(dataUrl);
     };

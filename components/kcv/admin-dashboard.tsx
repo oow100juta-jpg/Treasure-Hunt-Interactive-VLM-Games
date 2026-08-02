@@ -340,7 +340,7 @@ export function AdminDashboard({ roomId }: { roomId: string }) {
                           data.room.final_leaderboard_visible
                             ? "hide_final"
                             : "reveal_final",
-                        )
+                        ) 
                       }
                     >
                       {data.room.final_leaderboard_visible ? (
