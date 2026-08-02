@@ -86,7 +86,12 @@ export function PlayClient({ roomCode }: { roomCode: string }) {
     try {
       const response = await fetch("/api/participant/submit", { method: "POST", headers: { "X-Capture-Source": "browser-camera" }, body: form });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Submission failed.");
-      setRetryMode(false); setCameraOpen(false); setFile(null); if (preview) URL.revokeObjectURL(preview); setPreview(null); await refresh();
+      setRetryMode(false); setCameraOpen(false);
+      // Keep the current capture visible until fresh submission state replaces
+      // the previous submission image. The preview effect revokes the object URL
+      // after React commits the refreshed state.
+      await refresh();
+      setFile(null); setPreview(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Submission failed."); await refresh(); }
     finally { setBusy(false); }
   }
